@@ -1,0 +1,301 @@
+###Luna Theresa Lingemann###
+PCA v1.0
+
+# ============================================================
+# DESeq2 PCA ANALYSE
+# ============================================================
+
+
+# ============================================================
+# 1. Pakete installieren (nur beim ersten Mal notwendig)
+# ============================================================
+
+# BiocManager installieren, falls noch nicht vorhanden:
+# install.packages("BiocManager")
+# BiocManager::install("DESeq2")
+
+# ggplot2 und ggrepel:
+# install.packages("ggplot2")
+# install.packages("ggrepel")
+
+
+# ============================================================
+# 2. Pakete laden
+# ============================================================
+
+library(DESeq2)
+library(ggplot2)
+library(ggrepel)
+
+
+# ============================================================
+# 3. Daten einlesen
+# ============================================================
+
+# Count-Matrix einlesen
+counts_matrix <- read.csv(
+  "counts_species.txt",
+  row.names = 1,
+  check.names = FALSE
+)
+
+# Sample-Informationen einlesen
+sample_info <- read.csv(
+  "sample_info.txt",
+  row.names = 1,
+  check.names = FALSE
+)
+
+
+# ============================================================
+# 4. Kontrolle der Daten
+# ============================================================
+
+# Dimension der Count-Matrix
+dim(counts_matrix)
+
+# Erste Zeilen anzeigen
+head(counts_matrix)
+
+# Sample-Namen der Count-Matrix
+colnames(counts_matrix)
+
+# Sample-Namen der Metadaten
+rownames(sample_info)
+
+
+# ============================================================
+# 5. Prüfen, ob Sample-Namen zusammenpassen
+# ============================================================
+
+if (!all(colnames(counts_matrix) == rownames(sample_info))) {
+  
+  stop(
+    "Die Sample-Namen oder deren Reihenfolge stimmen nicht überein!"
+  )
+}
+
+
+# ============================================================
+# 6. Sample-Namen definieren
+# ============================================================
+
+# Hier kannst du deine gewünschten Namen eintragen.
+
+sample_info$sample_name <- c(
+  "Control_1",
+  "Control_2",
+  "Treatment_1",
+  "Treatment_2"
+)
+
+
+# Kontrolle
+sample_info
+
+
+# ============================================================
+# 7. Condition als Faktor definieren
+# ============================================================
+
+sample_info$condition <- factor(
+  sample_info$condition
+)
+
+
+# Optional:
+# Referenzgruppe festlegen
+
+sample_info$condition <- relevel(
+  sample_info$condition,
+  ref = "Control"
+)
+
+
+# ============================================================
+# 8. DESeq2-Objekt erstellen
+# ============================================================
+
+dds <- DESeqDataSetFromMatrix(
+  countData = counts_matrix,
+  colData = sample_info,
+  design = ~ condition
+)
+
+
+# ============================================================
+# 9. Gene mit sehr niedrigen Counts entfernen
+# ============================================================
+
+# Ein Gen muss in mindestens 2 Samples
+# mindestens 10 Counts haben.
+
+keep <- rowSums(
+  counts(dds) >= 10
+) >= 2
+
+dds <- dds[keep, ]
+
+
+# Anzahl verbleibender Gene
+cat(
+  "Verbleibende Gene:",
+  nrow(dds),
+  "\n"
+)
+
+
+# ============================================================
+# 10. DESeq2 ausführen
+# ============================================================
+
+dds <- DESeq(dds)
+
+
+# ============================================================
+# 11. Variance Stabilizing Transformation (VST)
+# ============================================================
+
+vsd <- vst(
+  dds,
+  blind = TRUE
+)
+
+
+# ============================================================
+# 12. PCA berechnen
+# ============================================================
+
+pca_data <- plotPCA(
+  vsd,
+  intgroup = "condition",
+  returnData = TRUE
+)
+
+
+# ============================================================
+# 13. Sample-Namen hinzufügen
+# ============================================================
+
+pca_data$name <- sample_info$sample_name
+
+
+# ============================================================
+# 14. Erklärte Varianz berechnen
+# ============================================================
+
+percent_var <- round(
+  100 * attr(
+    pca_data,
+    "percentVar"
+  ),
+  1
+)
+
+
+# Ausgabe im R-Terminal
+
+cat(
+  "PC1 erklärt:",
+  percent_var[1],
+  "% der Varianz\n"
+)
+
+cat(
+  "PC2 erklärt:",
+  percent_var[2],
+  "% der Varianz\n"
+)
+
+
+# ============================================================
+# 15. PCA plotten
+# ============================================================
+
+p <- ggplot(
+  pca_data,
+  aes(
+    x = PC1,
+    y = PC2,
+    color = condition,
+    label = name
+  )
+) +
+
+  geom_point(
+    size = 4
+  ) +
+
+  geom_text_repel(
+    size = 4,
+    max.overlaps = Inf
+  ) +
+
+  xlab(
+    paste0(
+      "PC1: ",
+      percent_var[1],
+      "%"
+    )
+  ) +
+
+  ylab(
+    paste0(
+      "PC2: ",
+      percent_var[2],
+      "%"
+    )
+  ) +
+
+  theme_classic() +
+
+  theme(
+    text = element_text(
+      size = 14
+    ),
+
+    legend.title = element_blank(),
+
+    plot.title = element_text(
+      hjust = 0.5
+    )
+  ) +
+
+  ggtitle(
+    "PCA – RNA-seq"
+  )
+
+
+# Plot anzeigen
+
+print(p)
+
+
+# ============================================================
+# 16. PCA als PDF speichern
+# ============================================================
+
+ggsave(
+  "PCA_DESeq2.pdf",
+  plot = p,
+  width = 8,
+  height = 6
+)
+
+
+# ============================================================
+# 17. PCA als PNG speichern
+# ============================================================
+
+ggsave(
+  "PCA_DESeq2.png",
+  plot = p,
+  width = 8,
+  height = 6,
+  dpi = 300
+)
+
+
+# ============================================================
+# ENDE
+# ============================================================

@@ -1,0 +1,129 @@
+###Luna Theresa Lingemann##
+Differential Expression v1.0
+
+library(DESeq2)
+
+# 1. Dateien einlesen
+counts <- read.delim(
+  "counts_species.txt",
+  header = TRUE,
+  row.names = 1,
+  check.names = FALSE
+)
+
+sample_info <- read.delim(
+  "metadata.txt",
+  header = TRUE,
+  stringsAsFactors = FALSE
+)
+
+# 2. Samples in gleiche Reihenfolge bringen
+counts_matrix <- as.matrix(
+  counts[, sample_info$Sample]
+)
+
+# 3. Dezimalwerte für DESeq2 runden
+counts_matrix <- round(counts_matrix)
+
+# 4. Metadata vorbereiten
+rownames(sample_info) <- sample_info$Sample
+
+sample_info$Condition <- factor(
+  sample_info$condition,
+  levels = c("condition1", "condition2")
+)
+
+# 5. DESeq2-Datensatz erstellen
+dds <- DESeqDataSetFromMatrix(
+  countData = counts_matrix,
+  colData = sample_info,
+  design = ~ Condition
+)
+
+# 6. Niedrig exprimierte Gene entfernen
+keep <- rowSums(counts(dds) >= 10) >= 2
+dds <- dds[keep, ]
+
+cat("Anzahl Gene nach Filterung:", nrow(dds), "\n")
+
+# 7. DESeq2
+dds <- DESeq(dds)
+
+# 8. condition2 vs condition1
+res <- results(
+  dds,
+  contrast = c(
+    "Condition",
+    "condition2",
+    "condition1"
+  )
+)
+
+res <- as.data.frame(res)
+res$Gene <- rownames(res)
+
+# 9. Signifikante Gene
+# padj < 0.05
+# |log2FC| >= 1
+sig <- res[
+  !is.na(res$padj) &
+  res$padj < 0.05 &
+  abs(res$log2FoldChange) >= 1,
+]
+
+# 10. Upregulated
+# condition2 > condition1
+up <- sig[
+  sig$log2FoldChange > 0,
+]
+
+# 11. Downregulated
+# condition2 < condition1
+down <- sig[
+  sig$log2FoldChange < 0,
+]
+
+# 12. Ergebnisse speichern
+write.table(
+  res,
+  "DESeq2_all_genes.tsv",
+  sep = "\t",
+  quote = FALSE,
+  row.names = FALSE
+)
+
+write.table(
+  sig,
+  "DESeq2_significant_genes.tsv",
+  sep = "\t",
+  quote = FALSE,
+  row.names = FALSE
+)
+
+write.table(
+  up,
+  "DESeq2_upregulated_genes.tsv",
+  sep = "\t",
+  quote = FALSE,
+  row.names = FALSE
+)
+
+write.table(
+  down,
+  "DESeq2_downregulated_genes.tsv",
+  sep = "\t",
+  quote = FALSE,
+  row.names = FALSE
+)
+
+# 13. Zusammenfassung
+cat("\n")
+cat("========================================\n")
+cat("DESeq2: condition2 vs condition1\n")
+cat("========================================\n")
+cat("Getestete Gene:    ", nrow(res), "\n")
+cat("Signifikante Gene: ", nrow(sig), "\n")
+cat("Upregulated:       ", nrow(up), "\n")
+cat("Downregulated:     ", nrow(down), "\n")
+cat("========================================\n")
+```
